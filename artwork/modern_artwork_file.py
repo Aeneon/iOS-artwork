@@ -114,6 +114,9 @@ class ModernArtworkFile(ArtworkFile):
     def width_byte_packing(self, is_greyscale, **kwargs):
         return 4 if is_greyscale else 1
 
+    def image_byte_packing(self, **kwargs):
+        return 1
+
     @property
     def artwork_set(self):
         return ModernArtworkSet(self)
@@ -137,11 +140,14 @@ class ModernArtworkFile(ArtworkFile):
 #------------------------------------------------------------------------------
 
 class WriteableModernArtworkFile(WriteableArtworkFile):
-    def __init__(self, filename, template_binary):
-        super(WriteableModernArtworkFile, self).__init__(filename, template_binary)
+    def __init__(self, filename, template_binary, **kwargs):
+        super(WriteableModernArtworkFile, self).__init__(filename, template_binary, **kwargs)
 
     def width_byte_packing(self, is_greyscale, **kwargs):
         return 4 if is_greyscale else 1
+
+    def image_byte_packing(self, **kwargs):
+        return 1
 
     @property
     def artwork_set(self):

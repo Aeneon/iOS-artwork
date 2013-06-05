@@ -100,6 +100,11 @@ class ArtworkFileCommon(object):
     """
     APIs that apply to both read and write artwork files.
     """
+    def __init__(self):
+        super(ArtworkFileCommon, self).__init__()
+        self.greyscale_pixel_size = 1
+        self.color_pixel_size = 4
+
     def byte_align(self, offset, alignment):
         """Perform packing alignment appropriate for image pixels in the .artwork file"""
         remainder = offset % alignment
@@ -110,8 +115,23 @@ class ArtworkFileCommon(object):
     def width_byte_align(self, width, **kwargs):
         return self.byte_align(width, self.width_byte_packing(**kwargs))
 
+    def image_byte_align(self, offset, **kwargs):
+        return self.byte_align(offset, self.image_byte_packing(**kwargs))
+
     def width_byte_packing(self, **kwargs):
         raise NotImplementedError("Implement in a derived class.")
+
+    def image_byte_packing(self, **kwargs):
+        raise NotImplementedError("Implement in a derived class.")
+
+    def bytes_required_for_image_of_size(self, width, height, is_greyscale):
+        aligned_width = self.width_byte_align(width, is_greyscale=is_greyscale)
+        pixel_width = self.greyscale_pixel_size if is_greyscale else self.color_pixel_size
+        return height * aligned_width * pixel_width
+
+    def offset_for_next_image(self, current_image_offset, image_width, image_height, is_greyscale):
+        next_minimum_offset = current_image_offset + self.bytes_required_for_image_of_size(image_width, image_height, is_greyscale)
+        return self.image_byte_align(next_minimum_offset)
 
     @property
     def artwork_set(self):
@@ -127,8 +147,6 @@ class ArtworkFile(BinaryFile, ArtworkFileCommon):
 
     def __init__(self, filename):
         super(ArtworkFile, self).__init__(filename)
-        self.greyscale_pixel_size = 1
-        self.color_pixel_size = 4
 
     def read_greyscale_pixel_at(self, offset):
         return self.read_byte_at(offset)
@@ -177,9 +195,8 @@ class ArtworkFile(BinaryFile, ArtworkFileCommon):
 
 class WriteableArtworkFile(WritableBinaryFile, ArtworkFileCommon):
     """Represents a writable iOS SDK .artwork file"""
-
-    def __init__(self, filename, template_binary):
-        super(WriteableArtworkFile, self).__init__(filename, template_binary)
+    def __init__(self, filename, template_binary, **kwargs):
+        super(WriteableArtworkFile, self).__init__(filename, template_binary, **kwargs)
 
     def write_greyscale_pixel_at(self, offset, grey):
         self.write_byte_at(offset, grey)

@@ -2,17 +2,19 @@
 #
 # iOS .artwork file extractor
 # (c)2008-2012 Dave Peck <davepeck [at] davepeck [dot] org> All Rights Reserved
-# 
+#
 # Released under the three-clause BSD license.
 #
 # http://github.com/davepeck/iOS-artwork/
 #
 #-------------------------------------------------------------------------------
 
+from __future__ import print_function
 import os
 import os.path
 import struct
 import mmap
+import ctypes
 
 
 #------------------------------------------------------------------------------
@@ -34,7 +36,7 @@ class BinaryFile(object):
         self._data = None
         self._data_length = -1
         self._endian = endian
-        
+
     def __del__(self):
         if self._data is not None:
             self._data.close()
@@ -46,22 +48,22 @@ class BinaryFile(object):
     @property
     def is_little_endian(self):
         return self._endian == "<"
-        
+
     @property
     def basename(self):
         return os.path.basename(self.filename)
-            
+
     @property
     def file_size(self):
         return os.path.getsize(self.filename)
-            
+
     @property
     def data(self):
         if self._data is None:
             self._file = open(self.filename, "rb")
             self._data = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
         return self._data
-        
+
     @property
     def data_length(self):
         if self._data_length == -1:
@@ -96,10 +98,12 @@ class WritableBinaryFile(BinaryFile):
     """
     A writable binary file on disk, backed by a template read-only binary.
     """
-    def __init__(self, filename, template_binary, endian="<"):
+    def __init__(self, filename, template_binary, endian="<", may_resize=False):
         super(WritableBinaryFile, self).__init__(filename, endian)
         self.template_binary = template_binary
         self._data_length = template_binary.data_length
+        self._may_resize = may_resize
+        self._largest_requested_length = 0
 
     @property
     def data(self):
@@ -109,29 +113,48 @@ class WritableBinaryFile(BinaryFile):
             self._file.write(self.template_binary.data)
             self._file.close()
 
-            self._file = open(self.filename, "r+b")
-            self._data = mmap.mmap(self._file.fileno(), self.data_length, access=mmap.ACCESS_WRITE)
+            # Unfortunately, mmap doesn't support resize on all systems
+            # So: if we don't need resize, go ahead and use mmap.
+            # Otherwise, we've got to build our own buffer.
+            if self._may_resize:
+                self._file = None
+                self._data = ctypes.create_string_buffer(self._data_length)
+            else:
+                self._file = open(self.filename, "r+b")
+                self._data = mmap.mmap(self._file.fileno(), self.data_length, access=mmap.ACCESS_WRITE)
         return self._data
-    
+
     @property
     def data_length(self):
         return self._data_length
-        
+
     def open(self):
         return self.data  # HACK -- obviously a bogus OM.
-        
+
     def close(self):
-        self._data.flush()
-        self._data.close()
+        if self._may_resize:
+            self._file = open(self.filename, "w")
+            self._file.write(self._data[:self._largest_requested_length])
+        else:
+            self._data.flush()
+            self._data.close()
         self._file.close()
         self._data = None
         self._file = None
-        
+
     def delete(self):
         self.close()
         os.remove(self.filename)
 
+    def resize(self, new_length):
+        self._largest_requested_length = max(self._largest_requested_length, new_length)
+        if self._may_resize and (new_length >= self._data_length):
+            ctypes.resize(self._data, new_length)
+            self._data_length = new_length
+
     def pack(self, structure, offset, *values):
+        size = struct.calcsize(structure)
+        self.resize(offset + size)
         struct.pack_into("%s%s" % (self._endian, structure), self.data, offset, *values)
 
     def write_long_at(self, offset, l):
@@ -145,6 +168,7 @@ class WritableBinaryFile(BinaryFile):
 
     def write_null_terminated_utf8_string_at(self, offset, s):
         bytes = s.encode("utf-8")
+        self.resize(offset + len(bytes))
         for byte in bytes:
             self.data[offset] = byte
             offset += 1

@@ -107,6 +107,9 @@ class LegacyArtworkFile(ArtworkFile):
     def width_byte_packing(self, **kwargs):
         return 8
 
+    def image_byte_packing(self, **kwargs):
+        return 4096
+
     @property
     def artwork_set(self):
         return LegacyArtworkSet(self, self.legacy_jsonable)
@@ -149,11 +152,14 @@ class LegacyArtworkFile(ArtworkFile):
 #------------------------------------------------------------------------------
 
 class WriteableLegacyArtworkFile(WriteableArtworkFile):
-    def __init__(self, filename, template_binary):
-        super(WriteableLegacyArtworkFile, self).__init__(filename, template_binary)
+    def __init__(self, filename, template_binary, **kwargs):
+        super(WriteableLegacyArtworkFile, self).__init__(filename, template_binary, **kwargs)
 
     def width_byte_packing(self, **kwargs):
         return 8
+
+    def image_byte_packing(self, **kwargs):
+        return 4096
 
     @property
     def artwork_set(self):
